@@ -9,18 +9,17 @@
 #include <WiFiManager.h> 
 
 // --- CONFIGURATION ---
-const char* kobraIP = "192.168.1.XXX"; 
-const char* discordWebhook = "YOUR_DISCORD_WEBHOOK_URL_HERE";
+const char* kobraIP = "192.168.1.242"; 
+const char* discordWebhook = "https://discord.com/api/webhooks/1479219312039428288/ahZOZb1Df_rS0cwJ7JH7R1vzYAL8wTj41eI_MnASYtwyz9G1vS9IdaEre68-oe-K67Mg";
 
-#define APP_KEY    "YOUR_SINRIC_APP_KEY"
-#define APP_SECRET "YOUR_SINRIC_APP_SECRET"
-#define LIGHT_ID   "YOUR_SINRIC_LIGHT_ID"
+#define APP_KEY    "821a4e8a-737c-44fc-abab-81f3652de4c1"
+#define APP_SECRET "88f75e44-3a0c-4ea9-a7c9-8f72f0d52f7f-bc3116f6-59ee-43ad-8b2a-52edfbeaa4b1"
+#define LIGHT_ID   "69a8ce7217b32c0941cc8a84"
 
 HuskylensV2 huskylens; 
 WebServer server(80);
 WiFiManager wm; 
 
-// Global Variables
 int aiConfidence = 100;
 int sensitivity = 50; 
 String printerStatus = "IDLE";
@@ -48,23 +47,24 @@ void sendStatusToGoogle(int mode) {
   else if (mode == 3) myLight.sendBrightnessEvent(100); 
 }
 
-// --- STOP PRINTER FUNCTION ---
 void stopPrinter() {
   HTTPClient http;
-  http.begin("http://" + String(kobraIP) + "/api/v1/stop"); // Common Anycubic API stop path
+  http.begin("http://" + String(kobraIP) + "/api/v1/stop");
   http.POST(""); 
   http.end();
   sendDiscordAlert("EMERGENCY STOP TRIGGERED", aiConfidence);
 }
 
-// --- WEB DASHBOARD (With Slider & Stop Button) ---
+// --- WEB DASHBOARD ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { font-family: sans-serif; background: #121212; color: white; text-align: center; margin:0; }
   .card { background: #1e1e1e; border-radius: 15px; padding: 20px; margin: 15px; border: 1px solid #333; }
   #conf-bar { background: #0072ff; height: 20px; border-radius: 10px; width: 100%; transition: 0.5s; }
-  .stop-btn { background: #ff4b2b; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+  .btn { border: none; padding: 15px 30px; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 10px; width: 80%; }
+  .stop-btn { background: #ff4b2b; color: white; }
+  .reset-btn { background: #4CAF50; color: white; }
   input[type=range] { width: 80%; margin: 20px 0; }
 </style></head><body>
   <div class="card"><h1>Kobra-Guard AI</h1><p>Status: <b id="p-status">IDLE</b></p></div>
@@ -73,7 +73,10 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input type="range" min="10" max="90" value="50" onchange="updateSens(this.value)">
     <p>Alert at: <span id="sens-val">50</span>%</p>
   </div>
-  <div class="card"><button class="stop-btn" onclick="if(confirm('Stop Print?')) fetch('/stop')">STOP PRINT</button></div>
+  <div class="card">
+    <button class="btn reset-btn" onclick="fetch('/reset')">RESET CONFIDENCE</button>
+    <button class="btn stop-btn" onclick="if(confirm('Stop Print?')) fetch('/stop')">STOP PRINT</button>
+  </div>
 <script>
   function updateSens(val) { document.getElementById('sens-val').innerHTML = val; fetch('/setSens?val=' + val); }
   setInterval(function(){
@@ -106,6 +109,11 @@ void setup() {
     sensitivity = server.arg("val").toInt();
     server.send(200);
   });
+  server.on("/reset", []() {
+    aiConfidence = 100;
+    hasFailed = false;
+    server.send(200, "text/plain", "Reset Complete");
+  });
   server.on("/stop", []() {
     stopPrinter();
     server.send(200, "text/plain", "Stopping...");
@@ -113,7 +121,7 @@ void setup() {
   server.begin();
 }
 
-// --- MAIN LOOP ---
+// --- LOOP ---
 void loop() {
   SinricPro.handle();
   server.handleClient();
@@ -124,22 +132,19 @@ void loop() {
     lastCheck = millis();
   }
 
-  // --- HUSKYLENS V2 AI LOGIC ---
-  if (isPrinting) {
-    if (huskylens.getResult(ALGORITHM_OBJECT_CLASSIFICATION)) {
-        if (huskylens.available(ALGORITHM_OBJECT_CLASSIFICATION)) {
-            auto result = huskylens.getCachedCenterResult(ALGORITHM_OBJECT_CLASSIFICATION);
-            if (result->ID == 2) { 
-              aiConfidence -= 5;
-              if (aiConfidence < sensitivity && !hasFailed) {
-                hasFailed = true;
-                sendStatusToGoogle(3);
-                sendDiscordAlert("FAILURE", aiConfidence);
-              }
-            } else if (result->ID == 1 && aiConfidence < 100) {
-              aiConfidence++; 
-            }
+  if (isPrinting && huskylens.getResult(ALGORITHM_OBJECT_CLASSIFICATION)) {
+    if (huskylens.available(ALGORITHM_OBJECT_CLASSIFICATION)) {
+      auto result = huskylens.getCachedCenterResult(ALGORITHM_OBJECT_CLASSIFICATION);
+      if (result->ID == 2) { 
+        aiConfidence -= 5;
+        if (aiConfidence < sensitivity && !hasFailed) {
+          hasFailed = true;
+          sendStatusToGoogle(3);
+          sendDiscordAlert("FAILURE", aiConfidence);
         }
+      } else if (result->ID == 1 && aiConfidence < 100) {
+        aiConfidence++; 
+      }
     }
   }
 }
