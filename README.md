@@ -6,9 +6,10 @@
 **Kobra-Guard AI** is an autonomous failure-detection system for the **Anycubic Kobra 3**. 
 Using a HuskyLens 2 AI camera and an ESP32, it monitors your prints for "spaghetti" or bed adhesion failures.
 When things go wrong, it alerts you via Discord, dims your smart lights, and gives you the power to stop the print remotely.
+---
+---
 join my discord if you need help or want to see more projects that aint here yet. https://discord.gg/Mv6mRAYqVP
 ---
-
 ## ✨ Key Features
 - **Real-Time AI Vision:** Detects failures using localized object classification (no cloud needed!).
 - **Rich Discord Alerts:** Sends formatted embeds with confidence scores directly to your server.
